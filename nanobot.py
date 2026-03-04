@@ -2,7 +2,6 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 import requests
 from datetime import datetime
-import asyncio
 
 TOKEN = "8525579637:AAEsjWlG7WVIPdXDqWG1z4asKEV5S6oktTY"
 API_KEY = "c76fbec0e18645652a17c73903e13e49"
@@ -24,7 +23,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     markup = ReplyKeyboardMarkup(teclado, resize_keyboard=True)
 
     await update.message.reply_text(
-        "🌤️ BOT METEOROLÓGICO COMPLETO\n\nEnvie sua localização ou escolha uma opção:",
+        "🌤️ BOT DO CLIMA\n\nEnvie sua localização ou escolha uma opção:",
         reply_markup=markup
     )
 
@@ -86,21 +85,34 @@ async def chuva(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lat = context.user_data.get("lat")
     lon = context.user_data.get("lon")
 
+    if not lat:
+        await update.message.reply_text("📍 Envie sua localização primeiro.")
+        return
+
     url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=pt_br"
 
     dados = requests.get(url).json()
 
-    chuva_total = 0
+    texto = "🌧️ Probabilidade de chuva próximas horas\n\n"
+
+    chuva_inicio = None
 
     for item in dados["list"][:8]:
+
+        hora = item["dt_txt"].split(" ")[1][:5]
+        prob = int(item["pop"] * 100)
+
+        chuva_mm = 0
         if "rain" in item:
-            chuva_total += item["rain"].get("3h", 0)
+            chuva_mm = item["rain"].get("3h", 0)
 
-    texto = f"""
-🌧️ Volume de chuva nas próximas horas
+        if prob > 50 and not chuva_inicio:
+            chuva_inicio = hora
 
-💧 Estimativa: {chuva_total} mm
-"""
+        texto += f"{hora} → {prob}% | {chuva_mm} mm\n"
+
+    if chuva_inicio:
+        texto = f"🌧️ A chuva pode começar por volta de {chuva_inicio}\n\n" + texto
 
     await update.message.reply_text(texto)
 
@@ -110,13 +122,17 @@ async def hora(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lat = context.user_data.get("lat")
     lon = context.user_data.get("lon")
 
+    if not lat:
+        await update.message.reply_text("📍 Envie sua localização primeiro.")
+        return
+
     url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=pt_br"
 
     dados = requests.get(url).json()
 
     texto = "⏰ Previsão próximas horas\n\n"
 
-    for item in dados["list"][:5]:
+    for item in dados["list"][:6]:
 
         hora = item["dt_txt"].split(" ")[1][:5]
         temp = item["main"]["temp"]
@@ -126,13 +142,17 @@ async def hora(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(texto)
 
-# ---------- PREVISÃO SEMANA ----------
+# ---------- SEMANA ----------
 async def semana(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lat = context.user_data.get("lat")
     lon = context.user_data.get("lon")
 
-    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=pt_br"
+    if not lat:
+        await update.message.reply_text("📍 Envie sua localização primeiro.")
+        return
+
+    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
 
     dados = requests.get(url).json()
 
@@ -165,15 +185,6 @@ async def radar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛰️ Radar meteorológico ao vivo:\nhttps://www.rainviewer.com/map.html"
     )
 
-# ---------- ALERTA AUTOMÁTICO ----------
-async def alerta():
-
-    while True:
-
-        await asyncio.sleep(3600)
-
-        print("Verificação automática de tempestade executada")
-
 # ---------- BOTÕES ----------
 async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -201,6 +212,6 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.LOCATION, localizar))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder))
 
-print("BOT METEOROLÓGICO COMPLETO ONLINE")
+print("BOT DO CLIMA ONLINE")
 
 app.run_polling()
