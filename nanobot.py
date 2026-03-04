@@ -6,7 +6,7 @@ from datetime import datetime
 TOKEN = "8525579637:AAEsjWlG7WVIPdXDqWG1z4asKEV5S6oktTY"
 API_KEY = "c76fbec0e18645652a17c73903e13e49"
 
-# ---------- MENU ----------
+# -------- MENU --------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     botao_local = KeyboardButton("📍 Enviar localização", request_location=True)
@@ -15,7 +15,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [botao_local],
         ["🌡️ Clima agora"],
         ["🌧️ Chuva próximas horas"],
-        ["⏰ Previsão por hora"],
         ["📅 Previsão semana"],
         ["🛰️ Radar de chuva"]
     ]
@@ -27,7 +26,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=markup
     )
 
-# ---------- LOCALIZAÇÃO ----------
+# -------- LOCALIZAÇÃO --------
 async def localizar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lat = update.message.location.latitude
@@ -40,7 +39,7 @@ async def localizar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await clima(update, context)
 
-# ---------- CLIMA ATUAL ----------
+# -------- CLIMA ATUAL --------
 async def clima(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lat = context.user_data.get("lat")
@@ -79,7 +78,7 @@ async def clima(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(texto)
 
-# ---------- CHUVA ----------
+# -------- CHUVA PRÓXIMAS HORAS --------
 async def chuva(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lat = context.user_data.get("lat")
@@ -93,56 +92,23 @@ async def chuva(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     dados = requests.get(url).json()
 
-    texto = "🌧️ Probabilidade de chuva próximas horas\n\n"
-
-    chuva_inicio = None
-
-    for item in dados["list"][:8]:
-
-        hora = item["dt_txt"].split(" ")[1][:5]
-        prob = int(item["pop"] * 100)
-
-        chuva_mm = 0
-        if "rain" in item:
-            chuva_mm = item["rain"].get("3h", 0)
-
-        if prob > 50 and not chuva_inicio:
-            chuva_inicio = hora
-
-        texto += f"{hora} → {prob}% | {chuva_mm} mm\n"
-
-    if chuva_inicio:
-        texto = f"🌧️ A chuva pode começar por volta de {chuva_inicio}\n\n" + texto
-
-    await update.message.reply_text(texto)
-
-# ---------- PREVISÃO POR HORA ----------
-async def hora(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    lat = context.user_data.get("lat")
-    lon = context.user_data.get("lon")
-
-    if not lat:
-        await update.message.reply_text("📍 Envie sua localização primeiro.")
-        return
-
-    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=pt_br"
-
-    dados = requests.get(url).json()
-
-    texto = "⏰ Previsão próximas horas\n\n"
+    texto = "⏰ Próximas horas\n\n"
 
     for item in dados["list"][:6]:
 
         hora = item["dt_txt"].split(" ")[1][:5]
-        temp = item["main"]["temp"]
-        desc = item["weather"][0]["description"]
 
-        texto += f"{hora} → {temp}°C | {desc}\n"
+        prob = int(item["pop"] * 100)
+
+        chuva = 0
+        if "rain" in item:
+            chuva = item["rain"].get("3h", 0)
+
+        texto += f"{hora} → {prob}% | {chuva:.2f}mm\n"
 
     await update.message.reply_text(texto)
 
-# ---------- SEMANA ----------
+# -------- PREVISÃO SEMANA --------
 async def semana(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lat = context.user_data.get("lat")
@@ -178,14 +144,14 @@ async def semana(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(texto)
 
-# ---------- RADAR ----------
+# -------- RADAR --------
 async def radar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "🛰️ Radar meteorológico ao vivo:\nhttps://www.rainviewer.com/map.html"
     )
 
-# ---------- BOTÕES ----------
+# -------- BOTÕES --------
 async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     texto = update.message.text
@@ -196,16 +162,13 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif texto == "🌧️ Chuva próximas horas":
         await chuva(update, context)
 
-    elif texto == "⏰ Previsão por hora":
-        await hora(update, context)
-
     elif texto == "📅 Previsão semana":
         await semana(update, context)
 
     elif texto == "🛰️ Radar de chuva":
         await radar(update, context)
 
-# ---------- BOT ----------
+# -------- BOT --------
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
