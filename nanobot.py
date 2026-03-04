@@ -2,11 +2,11 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 import requests
 
-TOKEN = "c76fbec0e18645652a17c73903e13e49"
+TOKEN = "8525579637:AAEsjWlG7WVIPdXDqWG1z4asKEV5S6oktTY"
 
 LAT = -8.5844
 LON = -39.8127
-API = "SUA_API_OPENWEATHER_AQUI"
+API = "c76fbec0e18645652a17c73903e13e49"
 
 
 # ===== CLIMA ATUAL =====
