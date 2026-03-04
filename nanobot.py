@@ -1,180 +1,87 @@
 import requests
-from telegram import Update, KeyboardButton, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
-TOKEN="8525579637:AAEsjWlG7WVIPdXDqWG1z4asKEV5S6oktTY"
-API_KEY="c76fbec0e18645652a17c73903e13e49"
+TOKEN = "8525579637:AAEsjWlG7WVIPdXDqWG1z4asKEV5S6oktTY"
+API_KEY = "c76fbec0e18645652a17c73903e13e49"
 
-usuarios={}
+# coordenadas (sua região)
+LAT = -8.5844
+LON = -39.8127
 
-# ---------------- START ----------------
+def pegar_clima():
+    url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&appid={API_KEY}&units=metric&lang=pt_br"
+    resposta = requests.get(url).json()
 
-async def start(update:Update,context:ContextTypes.DEFAULT_TYPE):
+    temp = resposta["main"]["temp"]
+    sensacao = resposta["main"]["feels_like"]
+    umidade = resposta["main"]["humidity"]
+    vento = resposta["wind"]["speed"]
+    clima = resposta["weather"][0]["description"]
 
-    botao=KeyboardButton("📍 Enviar localização",request_location=True)
+    return f"""
+☁️ Clima atual
 
-    teclado=ReplyKeyboardMarkup([[botao]],resize_keyboard=True)
+🌡️ Temperatura: {temp}°C
+🥵 Sensação térmica: {sensacao}°C
+💧 Umidade: {umidade}%
+💨 Vento: {vento} m/s
+🌥️ Condição: {clima}
+"""
+
+def pegar_previsao():
+    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={API_KEY}&units=metric&lang=pt_br"
+    resposta = requests.get(url).json()
+
+    previsao = "📅 Previsão próximos dias\n\n"
+
+    for item in resposta["list"][:8]:
+        temp = item["main"]["temp"]
+        clima = item["weather"][0]["description"]
+        hora = item["dt_txt"]
+
+        previsao += f"{hora}\n🌡️ {temp}°C | {clima}\n\n"
+
+    return previsao
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    teclado = ReplyKeyboardMarkup(
+        [["clima", "amanha"], ["semana", "chuva"]],
+        resize_keyboard=True
+    )
 
     await update.message.reply_text(
-        "🌦️ BOT CLIMÁTICO COMPLETO\n\n"
-        "Envie sua localização para ver a previsão completa 👇",
+        "🌤️ BOT CLIMÁTICO\n\nEscolha uma opção:",
         reply_markup=teclado
     )
 
-# ---------------- LOCALIZAÇÃO ----------------
+async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-async def local(update:Update,context:ContextTypes.DEFAULT_TYPE):
+    texto = update.message.text.lower()
 
-    lat=update.message.location.latitude
-    lon=update.message.location.longitude
-    chat_id=update.message.chat_id
+    if texto == "clima":
+        await update.message.reply_text(pegar_clima())
 
-    usuarios[chat_id]=(lat,lon)
+    elif texto == "amanha":
+        await update.message.reply_text(pegar_previsao())
 
-# clima atual
+    elif texto == "semana":
+        await update.message.reply_text(pegar_previsao())
 
-    clima=requests.get(
-        f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=pt_br"
-    ).json()
+    elif texto == "chuva":
+        await update.message.reply_text(pegar_previsao())
 
-# previsão
+async def main():
 
-    prev=requests.get(
-        f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=pt_br"
-    ).json()
+    app = ApplicationBuilder().token(TOKEN).build()
 
-    cidade=clima.get("name","Sua região")
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT, responder))
 
-    cond=clima["weather"][0]["main"].lower()
+    print("Bot rodando...")
 
-    emoji="☀️"
+    await app.run_polling()
 
-    if "cloud" in cond:
-        emoji="☁️"
-
-    if "rain" in cond:
-        emoji="🌧️"
-
-    if "storm" in cond:
-        emoji="⛈️"
-
-    chuva=int(prev["list"][0]["pop"]*100)
-
-# ---------------- ZONA ----------------
-
-    zona="🌾 Zona Rural"
-
-    geo=requests.get(
-        f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=json",
-        headers={"User-Agent":"bot"}
-    ).json()
-
-    if "address" in geo:
-
-        addr=geo["address"]
-
-        if "city" in addr or "town" in addr:
-            zona="🏙️ Zona Urbana"
-
-        if "village" in addr or "farm" in addr or "hamlet" in addr:
-            zona="🌾 Zona Rural"
-
-# ---------------- CLIMA ----------------
-
-    texto=(
-        f"{emoji} Clima em {cidade}\n\n"
-        f"🌡️ Temperatura: {clima['main']['temp']}°C\n"
-        f"🥵 Sensação térmica: {clima['main']['feels_like']}°C\n"
-        f"💧 Umidade: {clima['main']['humidity']}%\n"
-        f"💨 Vento: {clima['wind']['speed']} m/s\n"
-        f"🌥️ Condição: {clima['weather'][0]['description']}\n"
-        f"🌧️ Chance de chuva: {chuva}%\n\n"
-        f"📍 Zona: {zona}\n"
-        f"📍 Coordenadas: {round(lat,4)}, {round(lon,4)}"
-    )
-
-    await update.message.reply_text(texto)
-
-# ---------------- PREVISÃO HORAS ----------------
-
-    horas="\n⏰ Próximas horas\n\n"
-
-    for bloco in prev["list"][:6]:
-
-        hora=bloco["dt_txt"].split(" ")[1][:5]
-
-        chance=int(bloco["pop"]*100)
-
-        mm=0
-
-        if "rain" in bloco and "3h" in bloco["rain"]:
-            mm=bloco["rain"]["3h"]
-
-        horas+=f"{hora} → {chance}% | {mm}mm\n"
-
-    await update.message.reply_text(horas)
-
-# ---------------- PREVISÃO DIAS ----------------
-
-    dias="\n📅 Próximos dias\n\n"
-
-    usados=set()
-
-    for bloco in prev["list"]:
-
-        data=bloco["dt_txt"].split(" ")[0]
-
-        if data not in usados:
-
-            usados.add(data)
-
-            temp=bloco["main"]["temp"]
-
-            desc=bloco["weather"][0]["description"]
-
-            dias+=f"{data} → {temp}°C | {desc}\n"
-
-        if len(usados)==5:
-            break
-
-    await update.message.reply_text(dias)
-
-# ---------------- RADAR ----------------
-
-    radar=f"https://www.rainviewer.com/weather-radar-map-live.html?lat={lat}&lon={lon}&zoom=7"
-
-    await update.message.reply_text(
-        f"🛰️ Radar de chuva da sua região:\n{radar}"
-    )
-
-# ---------------- ALERTA ----------------
-
-async def alerta(context:ContextTypes.DEFAULT_TYPE):
-
-    for chat_id,(lat,lon) in usuarios.items():
-
-        prev=requests.get(
-            f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
-        ).json()
-
-        chance=int(prev["list"][0]["pop"]*100)
-
-        if chance>=80:
-
-            await context.bot.send_message(
-                chat_id,
-                f"⚠️ ALERTA DE CHUVA FORTE\n\nChance de chuva: {chance}% 🌧️"
-            )
-
-# ---------------- BOT ----------------
-
-app=ApplicationBuilder().token(TOKEN).build()
-
-app.add_handler(CommandHandler("start",start))
-app.add_handler(MessageHandler(filters.LOCATION,local))
-
-app.job_queue.run_repeating(alerta,interval=600,first=20)
-
-print("🌦️ Bot climático completo rodando...")
-
-app.run_polling()
+import asyncio
+asyncio.run(main())
