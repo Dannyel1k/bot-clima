@@ -1,87 +1,59 @@
 import requests
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = "8525579637:AAEsjWlG7WVIPdXDqWG1z4asKEV5S6oktTY"
 API_KEY = "c76fbec0e18645652a17c73903e13e49"
 
-# coordenadas (sua região)
 LAT = -8.5844
 LON = -39.8127
 
-def pegar_clima():
-    url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&appid={API_KEY}&units=metric&lang=pt_br"
-    resposta = requests.get(url).json()
 
-    temp = resposta["main"]["temp"]
-    sensacao = resposta["main"]["feels_like"]
-    umidade = resposta["main"]["humidity"]
-    vento = resposta["wind"]["speed"]
-    clima = resposta["weather"][0]["description"]
+def clima():
+    url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT}&lon={LON}&appid={API_KEY}&units=metric&lang=pt_br"
+    r = requests.get(url).json()
+
+    temp = r["main"]["temp"]
+    umidade = r["main"]["humidity"]
+    vento = r["wind"]["speed"]
+    condicao = r["weather"][0]["description"]
 
     return f"""
 ☁️ Clima atual
 
 🌡️ Temperatura: {temp}°C
-🥵 Sensação térmica: {sensacao}°C
 💧 Umidade: {umidade}%
 💨 Vento: {vento} m/s
-🌥️ Condição: {clima}
+🌥️ Condição: {condicao}
 """
 
-def pegar_previsao():
-    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={API_KEY}&units=metric&lang=pt_br"
-    resposta = requests.get(url).json()
-
-    previsao = "📅 Previsão próximos dias\n\n"
-
-    for item in resposta["list"][:8]:
-        temp = item["main"]["temp"]
-        clima = item["weather"][0]["description"]
-        hora = item["dt_txt"]
-
-        previsao += f"{hora}\n🌡️ {temp}°C | {clima}\n\n"
-
-    return previsao
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     teclado = ReplyKeyboardMarkup(
-        [["clima", "amanha"], ["semana", "chuva"]],
+        [["clima"]],
         resize_keyboard=True
     )
 
     await update.message.reply_text(
-        "🌤️ BOT CLIMÁTICO\n\nEscolha uma opção:",
+        "🌤️ BOT DO CLIMA\n\nClique no botão:",
         reply_markup=teclado
     )
+
 
 async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     texto = update.message.text.lower()
 
     if texto == "clima":
-        await update.message.reply_text(pegar_clima())
+        await update.message.reply_text(clima())
 
-    elif texto == "amanha":
-        await update.message.reply_text(pegar_previsao())
 
-    elif texto == "semana":
-        await update.message.reply_text(pegar_previsao())
+app = ApplicationBuilder().token(TOKEN).build()
 
-    elif texto == "chuva":
-        await update.message.reply_text(pegar_previsao())
+app.add_handler(CommandHandler("start", start))
+app.add_handler(MessageHandler(filters.TEXT, responder))
 
-async def main():
+print("BOT ONLINE")
 
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT, responder))
-
-    print("Bot rodando...")
-
-    await app.run_polling()
-
-import asyncio
-asyncio.run(main())
+app.run_polling()
