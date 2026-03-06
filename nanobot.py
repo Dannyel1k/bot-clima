@@ -1,14 +1,13 @@
 import requests
 from datetime import datetime, timedelta
-from telegram import ReplyKeyboardMarkup, Update
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = "8525579637:AAEsjWlG7WVIPdXDqWG1z4asKEV5S6oktTY"
 API_KEY = "c76fbec0e18645652a17c73903e13e49"
 
-# MENU
 menu = [
-    ["📍 Enviar localização"],
+    [KeyboardButton("📍 Enviar localização", request_location=True)],
     ["🌡 Clima agora"],
     ["🌧 Chuva próximas horas"],
     ["📅 Previsão semana"],
@@ -17,80 +16,145 @@ menu = [
 
 markup = ReplyKeyboardMarkup(menu, resize_keyboard=True)
 
-# COMANDO START
+usuarios = {}
+
+# START
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🌤 BOT DO CLIMA\nEnvie sua localização ou escolha uma opção:",
+        "🌤 BOT DO CLIMA\nEnvie sua localização para receber alertas de chuva.",
         reply_markup=markup
     )
+
+# RECEBER LOCALIZAÇÃO
+async def receber_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    lat = update.message.location.latitude
+    lon = update.message.location.longitude
+    chat_id = update.message.chat_id
+
+    usuarios[chat_id] = {"lat": lat, "lon": lon}
+
+    await update.message.reply_text("📍 Localização salva! Alertas ativados.")
 
 # CLIMA AGORA
 async def clima(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    cidade = "Santa Maria da Boa Vista,BR"
+    chat_id = update.message.chat_id
 
-    url = f"https://api.openweathermap.org/data/2.5/weather?q={cidade}&appid={API_KEY}&units=metric&lang=pt_br"
+    if chat_id not in usuarios:
+        await update.message.reply_text("📍 Envie sua localização primeiro.")
+        return
+
+    lat = usuarios[chat_id]["lat"]
+    lon = usuarios[chat_id]["lon"]
+
+    url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=pt_br"
 
     dados = requests.get(url).json()
 
     temp = dados["main"]["temp"]
-    sensacao = dados["main"]["feels_like"]
-    umidade = dados["main"]["humidity"]
-    vento = dados["wind"]["speed"]
     clima = dados["weather"][0]["description"]
 
-    nascer = dados["sys"]["sunrise"]
-    por = dados["sys"]["sunset"]
-    timezone = dados["timezone"]
-
-    nascer_sol = datetime.utcfromtimestamp(nascer) + timedelta(seconds=timezone)
-    por_sol = datetime.utcfromtimestamp(por) + timedelta(seconds=timezone)
-
-    resposta = f"""
-☀️ Clima em Santa Maria da Boa Vista
-
-🌡 Temperatura: {temp:.2f}°C
-🥵 Sensação térmica: {sensacao:.2f}°C
-💧 Umidade: {umidade}%
-💨 Vento: {vento} m/s
-🌥 Condição: {clima}
-
-🌅 Nascer do sol: {nascer_sol.strftime("%H:%M")}
-🌇 Pôr do sol: {por_sol.strftime("%H:%M")}
-"""
-
-    await update.message.reply_text(resposta)
+    await update.message.reply_text(
+        f"🌡 Temperatura: {temp}°C\n🌥 Condição: {clima}"
+    )
 
 # CHUVA PRÓXIMAS HORAS
 async def chuva_horas(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
+    chat_id = update.message.chat_id
+
+    if chat_id not in usuarios:
+        await update.message.reply_text("📍 Envie sua localização primeiro.")
+        return
+
+    lat = usuarios[chat_id]["lat"]
+    lon = usuarios[chat_id]["lon"]
+
+    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
+
+    dados = requests.get(url).json()
+
+    chuva = dados["list"][0]["pop"] * 100
+
     await update.message.reply_text(
-        "🌧 Analisando previsão das próximas horas..."
+        f"🌧 Chance de chuva nas próximas horas: {chuva:.0f}%"
     )
 
 # PREVISÃO SEMANA
 async def previsao_semana(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    await update.message.reply_text(
-        "📅 Buscando previsão da semana..."
-    )
+    chat_id = update.message.chat_id
 
-# RADAR DE CHUVA
+    if chat_id not in usuarios:
+        await update.message.reply_text("📍 Envie sua localização primeiro.")
+        return
+
+    lat = usuarios[chat_id]["lat"]
+    lon = usuarios[chat_id]["lon"]
+
+    url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric&lang=pt_br"
+
+    dados = requests.get(url).json()
+
+    texto = "📅 Previsão próximos dias\n\n"
+
+    for i in range(0, 40, 8):
+
+        dia = dados["list"][i]
+
+        data = datetime.fromtimestamp(dia["dt"]).strftime("%d/%m")
+
+        temp = dia["main"]["temp"]
+
+        clima = dia["weather"][0]["description"]
+
+        texto += f"{data} → {temp:.1f}°C | {clima}\n"
+
+    await update.message.reply_text(texto)
+
+# RADAR
 async def radar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
-        "🛰 Radar meteorológico em breve..."
+        "🛰 Radar meteorológico:\nhttps://www.rainviewer.com/map.html"
     )
 
-# INICIAR BOT
+# ALERTA AUTOMÁTICO
+async def alerta_chuva(context: ContextTypes.DEFAULT_TYPE):
+
+    for chat_id, dados_usuario in usuarios.items():
+
+        lat = dados_usuario["lat"]
+        lon = dados_usuario["lon"]
+
+        url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
+
+        dados = requests.get(url).json()
+
+        chuva = dados["list"][0]["pop"] * 100
+
+        if chuva >= 60:
+
+            await context.bot.send_message(
+                chat_id,
+                f"🌧 ALERTA DE CHUVA\nChance de chuva: {chuva:.0f}% nas próximas horas."
+            )
+
+# BOT
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
+
+app.add_handler(MessageHandler(filters.LOCATION, receber_localizacao))
 
 app.add_handler(MessageHandler(filters.Regex("Clima agora"), clima))
 app.add_handler(MessageHandler(filters.Regex("Chuva próximas horas"), chuva_horas))
 app.add_handler(MessageHandler(filters.Regex("Previsão semana"), previsao_semana))
 app.add_handler(MessageHandler(filters.Regex("Radar de chuva"), radar))
+
+# verificar chuva a cada 15 minutos
+app.job_queue.run_repeating(alerta_chuva, interval=900, first=10)
 
 print("BOT CLIMA ONLINE")
 
